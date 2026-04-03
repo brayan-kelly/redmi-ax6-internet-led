@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Initialize configuration if not present
+uci -q get internet-led.main || {
+    uci set internet-led.main=internet_led
+    uci set internet-led.main.enabled=1
+    uci set internet-led.main.wan_if=wan
+    uci set internet-led.main.interval=5
+    uci set internet-led.main.fail_threshold=3
+    uci set internet-led.main.blue_led=blue:network
+    uci set internet-led.main.yellow_led=yellow:network
+    uci set internet-led.main.diagnostic_targets="8.8.8.8 1.1.1.1 9.9.9.9"
+    uci commit internet-led
+}
+
+# Ensure all custom files survive sysupgrade
+add_to_sysupgrade() {
+    grep -q "^$1$" /etc/sysupgrade.conf || echo "$1" >> /etc/sysupgrade.conf
+}
+
+add_to_sysupgrade "/etc/config/internet-led"
+add_to_sysupgrade "/etc/init.d/internet-led"
+add_to_sysupgrade "/usr/bin/internet-led.sh"
+add_to_sysupgrade "/usr/libexec/rpcd/internet-led-lists"
+add_to_sysupgrade "/usr/share/rpcd/acl.d/luci-app-internet-led.json"
+add_to_sysupgrade "/usr/share/luci/menu.d/luci-app-internet-led.json"
+add_to_sysupgrade "/www/luci-static/resources/view/internet-led/"
+
+/etc/init.d/internet-led enable
+/etc/init.d/internet-led start
+
+exit 0

@@ -1,0 +1,22 @@
+{
+	"luci-app-internet-led": {
+		"description": "Grant UCI access for internet-led",
+		"read": {
+			"ubus": {
+				"internet-led-state": [ "get" ],
+				"internet-led-lists": [ "get_leds" ]
+			},
+			"uci": [
+				"internet-led"
+			],
+			"file": {
+				"/tmp/internet_led_state": [ "read" ]
+			}
+		},
+		"write": {
+			"uci": [
+				"internet-led"
+			]
+		}
+	}
+}

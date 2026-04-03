@@ -1,0 +1,8 @@
+config internet_led 'main'
+    option enabled '1'
+    option wan_if 'wan'
+    option interval '5'
+    option fail_threshold '3'
+    option blue_led 'blue:network'
+    option yellow_led 'yellow:network'
+    option diagnostic_targets '8.8.8.8 1.1.1.1 9.9.9.9'

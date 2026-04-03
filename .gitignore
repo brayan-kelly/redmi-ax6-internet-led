@@ -1,0 +1,4 @@
+luci-app-internet-led/
+*.tar.gz
+.DS_Store
+Thumbs.db

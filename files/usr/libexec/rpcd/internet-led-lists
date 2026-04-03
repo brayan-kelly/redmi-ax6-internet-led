@@ -1,0 +1,27 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+
+case "$1" in
+  list)
+    json_init
+    json_add_object "get_leds"
+    json_close_object
+    json_dump
+    ;;
+  call)
+    case "$2" in
+      get_leds)
+        json_init
+        json_add_array "leds"
+        for led in /sys/class/leds/*; do
+          if [ -d "$led" ]; then
+            name=$(basename "$led")
+            json_add_string "" "$name"
+          fi
+        done
+        json_close_array
+        json_dump
+        ;;
+    esac
+    ;;
+esac
