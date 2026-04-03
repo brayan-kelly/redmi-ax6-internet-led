@@ -85,13 +85,13 @@ jobs:
       
       - name: Verify and rename artifact
         run: |
-          if [ ! -f "internet-led-control.tar.gz" ]; then
-            echo "Error: internet-led-control.tar.gz was not created"
+          if [ ! -f "luci-app-internet-led.tar.gz" ]; then
+            echo "Error: luci-app-internet-led.tar.gz was not created"
             exit 1
           fi
           
           NEW_NAME="internet-led-control-${{ steps.get_tag.outputs.TAG_NAME }}.tar.gz"
-          mv internet-led-control.tar.gz "$NEW_NAME"
+          mv luci-app-internet-led.tar.gz "$NEW_NAME"
           echo "ARTIFACT_NAME=$NEW_NAME" >> $GITHUB_ENV
           echo "Created artifact: $NEW_NAME"
       
