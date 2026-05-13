@@ -81,6 +81,7 @@ The uci‑defaults script (/etc/uci-defaults/99_internet-led) adds all relevant 
 - /etc/init.d/internet-led – Init script
 - /usr/bin/internet-led.sh – Main monitoring script
 - /usr/libexec/rpcd/internet-led-lists – RPC endpoint for LED listing
+- /usr/libexec/rpcd/internet-led-state – RPC endpoint for status reporting
 - /usr/share/rpcd/acl.d/luci-app-internet-led.json – ACL definition
 - /usr/share/luci/menu.d/luci-app-internet-led.json – LuCI menu entry
 - /www/luci-static/resources/view/internet-led/ – LuCI view files

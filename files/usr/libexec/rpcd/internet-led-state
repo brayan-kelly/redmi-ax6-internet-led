@@ -1,0 +1,39 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+
+STATE_FILE="/tmp/internet_led_state"
+
+read_state() {
+    local state
+
+    if [ -r "$STATE_FILE" ]; then
+        state="$(cat "$STATE_FILE" 2>/dev/null)"
+    fi
+
+    case "$state" in
+        ONLINE|OFFLINE|DISCONNECTED)
+            echo "$state"
+            ;;
+        *)
+            echo "UNKNOWN"
+            ;;
+    esac
+}
+
+case "$1" in
+    list)
+        json_init
+        json_add_object "get"
+        json_close_object
+        json_dump
+        ;;
+    call)
+        case "$2" in
+            get)
+                json_init
+                json_add_string "state" "$(read_state)"
+                json_dump
+                ;;
+        esac
+        ;;
+esac
