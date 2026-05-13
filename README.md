@@ -13,7 +13,7 @@ A LuCI app that controls your router's LEDs based on internet connectivity statu
 - Configurable check interval, failure threshold, and diagnostic targets
 - Real‑time status dashboard in LuCI
 - Configuration page to select WAN interface, LED names, and other settings
-- Persists across firmware upgrades (sysupgrade)
+- Preserves configuration as package-managed config
 
 ## Installation
 
@@ -57,20 +57,13 @@ Available options:
 - When connectivity is restored, it lights the blue LED.
 - If the cable is disconnected, both LEDs are turned off.
 
-## Sysupgrade Persistence
+## Package Persistence
 
-The uci‑defaults script (/etc/uci-defaults/99_internet-led) adds all relevant files to /etc/sysupgrade.conf:
+The package marks the UCI configuration as a managed config file:
 
 - /etc/config/internet-led – UCI configuration
-- /etc/init.d/internet-led – Init script
-- /usr/bin/internet-led.sh – Main monitoring script
-- /usr/libexec/rpcd/internet-led-lists – RPC endpoint for LED listing
-- /usr/libexec/rpcd/internet-led-state – RPC endpoint for status reporting
-- /usr/share/rpcd/acl.d/luci-app-internet-led.json – ACL definition
-- /usr/share/luci/menu.d/luci-app-internet-led.json – LuCI menu entry
-- /www/luci-static/resources/view/internet-led/ – LuCI view files
 
-This ensures your configuration and custom files survive a firmware upgrade.
+Package-owned files are restored by reinstalling the `.apk`; local configuration is preserved by the package manager.
 
 ## File Structure
 ```
@@ -80,8 +73,6 @@ Files/
 │ │ └── internet-led # UCI config
 │ ├── init.d/
 │ │ └── internet-led # Init script
-│ └── uci-defaults/
-│ └── 99_internet-led # One‑time setup script
 ├── usr/
 │ ├── bin/
 │ │ └── internet-led.sh # Core monitoring daemon

@@ -36,8 +36,16 @@ define Package/luci-app-internet-led/postinst
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 
-if [ -x /etc/uci-defaults/99_internet-led ]; then
-	/etc/uci-defaults/99_internet-led
+if ! uci -q get internet-led.main >/dev/null; then
+	uci set internet-led.main=internet_led
+	uci set internet-led.main.enabled='1'
+	uci set internet-led.main.wan_if='wan'
+	uci set internet-led.main.interval='5'
+	uci set internet-led.main.fail_threshold='3'
+	uci set internet-led.main.blue_led='blue:network'
+	uci set internet-led.main.yellow_led='yellow:network'
+	uci set internet-led.main.diagnostic_targets='8.8.8.8 1.1.1.1 9.9.9.9'
+	uci commit internet-led
 fi
 
 /etc/init.d/rpcd restart >/dev/null 2>&1 || true
