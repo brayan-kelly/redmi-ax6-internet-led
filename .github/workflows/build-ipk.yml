@@ -1,4 +1,4 @@
-name: Build IPK
+name: Build OpenWrt Package
 
 on:
   push:
@@ -14,14 +14,15 @@ env:
   OPENWRT_ARCH: aarch64_cortex-a53
   SDK_NAME: openwrt-sdk-25.12.3-qualcommax-ipq807x_gcc-14.3.0_musl.Linux-x86_64
   PACKAGE_NAME: luci-app-internet-led
+  PACKAGE_EXT: apk
 
 concurrency:
-  group: build-ipk-${{ github.ref }}
+  group: build-openwrt-package-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-ipk:
-    name: Build OpenWrt IPK
+  build-package:
+    name: Build OpenWrt Package
     runs-on: ubuntu-latest
 
     permissions:
@@ -54,6 +55,7 @@ jobs:
             --exclude='.DS_Store' \
             --exclude='*.tar.gz' \
             --exclude='*.tar.zst' \
+            --exclude='*.apk' \
             --exclude='*.ipk' \
             --exclude="${SDK_NAME}" \
             --exclude='artifacts' \
@@ -67,26 +69,26 @@ jobs:
           make defconfig
           make package/${PACKAGE_NAME}/compile V=s
 
-      - name: Collect IPK and checksums
+      - name: Collect package and checksums
         run: |
           mkdir -p artifacts
-          IPK_PATH="$(find "${SDK_NAME}/bin/packages" -name "${PACKAGE_NAME}_*.ipk" -print -quit)"
+          PACKAGE_PATH="$(find "${SDK_NAME}/bin/packages" \( -name "${PACKAGE_NAME}-*.${PACKAGE_EXT}" -o -name "${PACKAGE_NAME}_*.${PACKAGE_EXT}" \) -print -quit)"
 
-          if [ -z "$IPK_PATH" ]; then
-            echo "No ${PACKAGE_NAME} .ipk was built"
+          if [ -z "$PACKAGE_PATH" ]; then
+            echo "No ${PACKAGE_NAME} .${PACKAGE_EXT} was built"
             find "${SDK_NAME}/bin/packages" -maxdepth 5 -type f || true
             exit 1
           fi
 
-          cp "$IPK_PATH" artifacts/
+          cp "$PACKAGE_PATH" artifacts/
           cd artifacts
-          sha256sum ./*.ipk > SHA256SUMS
+          sha256sum ./*.${PACKAGE_EXT} > SHA256SUMS
 
-      - name: Upload IPK artifact
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PACKAGE_NAME }}-${{ env.OPENWRT_VERSION }}-${{ env.OPENWRT_ARCH }}
           path: |
-            artifacts/*.ipk
+            artifacts/*.apk
             artifacts/SHA256SUMS
           if-no-files-found: error

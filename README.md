@@ -17,20 +17,20 @@ A LuCI app that controls your router's LEDs based on internet connectivity statu
 
 ## Installation
 
-### Install from IPK
+### Install from OpenWrt Package
 
-Tagged GitHub releases include an OpenWrt `.ipk` built for:
+Tagged GitHub releases include an OpenWrt `.apk` package built for:
 
 - OpenWrt 25.12.3
 - `qualcommax/ipq807x`
 - `aarch64_cortex-a53`
 
-Copy the `.ipk` to the router and install it:
+Copy the `.apk` to the router and install it:
 
 ```sh
-scp luci-app-internet-led_*.ipk root@router:/tmp/
+scp luci-app-internet-led-*.apk root@router:/tmp/
 ssh root@router
-opkg install /tmp/luci-app-internet-led_*.ipk
+apk add --allow-untrusted /tmp/luci-app-internet-led-*.apk
 ```
 
 ### Build the tarball
