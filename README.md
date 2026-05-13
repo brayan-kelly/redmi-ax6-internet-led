@@ -33,22 +33,6 @@ ssh root@router
 apk add --allow-untrusted /tmp/luci-app-internet-led-*.apk
 ```
 
-### Build the tarball
-
-./create-internet-led-tarball.sh
-
-This creates luci-app-internet-led.tar.gz in the current directory.
-
-### Install on the router
-
-Copy the tarball to your router and extract it:
-
-scp luci-app-internet-led.tar.gz root@router:/tmp/
-ssh root@router
-cd / && tar -xzf /tmp/luci-app-internet-led.tar.gz && ./install.sh
-
-The installer copies all files, runs the uci‑defaults script (which initialises the configuration if needed), and starts the service.
-
 ## Configuration
 
 After installation, navigate to LuCI → Status → Internet LED to view the dashboard and adjust settings.
@@ -103,7 +87,8 @@ Files/
 │ │ └── internet-led.sh # Core monitoring daemon
 │ ├── libexec/
 │ │ └── rpcd/
-│ │ └── internet-led-lists # RPC to list available LEDs
+│ │ ├── internet-led-lists # RPC to list available LEDs
+│ │ └── internet-led-state # RPC to report current status
 │ └── share/
 │ ├── rpcd/
 │ │ └── acl.d/
@@ -122,11 +107,13 @@ Files/
 
 ## Uninstallation
 
-The tarball includes an uninstall script. To remove the package, simply run:
+Remove the package with:
 
-./uninstall.sh
+```sh
+apk del luci-app-internet-led
+```
 
-This will stop the service, remove all installed files, and restart rpcd and uhttpd.
+This stops and disables the service through the package removal hooks.
 
 ## License
 
