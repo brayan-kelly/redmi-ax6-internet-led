@@ -1,15 +1,15 @@
 #!/bin/sh
 
 load_config() {
-    ENABLED=$(uci -q get internet_led.main.enabled || echo "1")
+    ENABLED=$(uci -q get internet-led.main.enabled || echo "1")
     [ "$ENABLED" = "0" ] && return 1
 
-    WAN_IF=$(uci -q get internet_led.main.wan_if || echo "wan")
-    INTERVAL=$(uci -q get internet_led.main.interval || echo "5")
-    FAIL_THRESHOLD=$(uci -q get internet_led.main.fail_threshold || echo "3")
-    BLUE_LED=$(uci -q get internet_led.main.blue_led || echo "blue:network")
-    YELLOW_LED=$(uci -q get internet_led.main.yellow_led || echo "yellow:network")
-    TARGETS=$(uci -q get internet_led.main.diagnostic_targets || echo "8.8.8.8 1.1.1.1 9.9.9.9")
+    WAN_IF=$(uci -q get internet-led.main.wan_if || echo "wan")
+    INTERVAL=$(uci -q get internet-led.main.interval || echo "5")
+    FAIL_THRESHOLD=$(uci -q get internet-led.main.fail_threshold || echo "3")
+    BLUE_LED=$(uci -q get internet-led.main.blue_led || echo "blue:network")
+    YELLOW_LED=$(uci -q get internet-led.main.yellow_led || echo "yellow:network")
+    TARGETS=$(uci -q get internet-led.main.diagnostic_targets || echo "8.8.8.8 1.1.1.1 9.9.9.9")
 
     # Ensure numeric values are valid
     case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=5 ;; esac

@@ -11,7 +11,7 @@ LOG_TAG="internet-led"
 
 start_service() {
     local enabled
-    config_load internet_led
+    config_load internet-led
     config_get_bool enabled main enabled 1
     [ "$enabled" -eq 0 ] && return 0
 
