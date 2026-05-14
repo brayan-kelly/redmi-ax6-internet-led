@@ -1,0 +1,156 @@
+name: Build OpenWrt Package (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      openwrt_version:
+        description: 'OpenWrt version to build against'
+        required: true
+        type: string
+        default: '25.12.3'
+      openwrt_target:
+        description: 'OpenWrt target platform'
+        required: true
+        type: string
+        default: 'qualcommax/ipq807x'
+      openwrt_arch:
+        description: 'OpenWrt architecture'
+        required: true
+        type: string
+        default: 'aarch64_cortex-a53'
+      package_name:
+        description: 'Package name'
+        required: true
+        type: string
+        default: 'luci-app-internet-led'
+      package_ext:
+        description: 'Package extension'
+        required: true
+        type: string
+        default: 'apk'
+      upload_artifact:
+        description: 'Whether to upload artifacts'
+        required: false
+        type: boolean
+        default: true
+      artifact_name_suffix:
+        description: 'Suffix for artifact name'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build-package:
+    name: Build OpenWrt Package
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk gettext git \
+            libncurses-dev libssl-dev python3 python3-setuptools rsync \
+            unzip zlib1g-dev file wget tar zstd
+
+      - name: Cache OpenWrt SDK download
+        id: cache-sdk
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ${{ env.SDK_NAME }}.tar.zst
+          key: sdk-${{ inputs.openwrt_version }}-${{ inputs.openwrt_target }}-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            sdk-${{ inputs.openwrt_version }}-${{ inputs.openwrt_target }}-
+            sdk-${{ inputs.openwrt_version }}-
+
+      - name: Download OpenWrt SDK
+        run: |
+          SDK_NAME="openwrt-sdk-${{ inputs.openwrt_version }}-${{ inputs.openwrt_target }}_gcc-14.3.0_musl.Linux-x86_64"
+          echo "SDK_NAME=$SDK_NAME" >> $GITHUB_ENV
+          SDK_URL="https://downloads.openwrt.org/releases/${{ inputs.openwrt_version }}/targets/${{ inputs.openwrt_target }}/${SDK_NAME}.tar.zst"
+          if [ ! -f "${SDK_NAME}.tar.zst" ]; then
+            wget "$SDK_URL"
+          else
+            echo "Using cached SDK archive"
+          fi
+          tar -xf "${SDK_NAME}.tar.zst"
+
+      - name: Cache OpenWrt build directories
+        id: cache-build
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: |
+            ${{ env.SDK_NAME }}/staging_dir
+            ${{ env.SDK_NAME }}/build_dir
+            ${{ env.SDK_NAME }}/dl
+          key: build-${{ inputs.openwrt_version }}-${{ inputs.openwrt_target }}-${{ hashFiles('Makefile', 'src/**') }}
+          restore-keys: |
+            build-${{ inputs.openwrt_version }}-${{ inputs.openwrt_target }}-
+            build-${{ inputs.openwrt_version }}-
+
+      - name: Copy package into SDK
+        run: |
+          mkdir -p "${SDK_NAME}/package/${PACKAGE_NAME}"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.DS_Store' \
+            --exclude='*.tar.gz' \
+            --exclude='*.tar.zst' \
+            --exclude='*.apk' \
+            --exclude='*.ipk' \
+            --exclude="${SDK_NAME}" \
+            --exclude='artifacts' \
+            --exclude='package-artifacts' \
+            ./ "${SDK_NAME}/package/${PACKAGE_NAME}/"
+        env:
+          SDK_NAME: ${{ env.SDK_NAME }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+
+      - name: Update feeds and install dependencies
+        working-directory: ${{ env.SDK_NAME }}
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install luci-base
+
+      - name: Build package
+        working-directory: ${{ env.SDK_NAME }}
+        run: |
+          make defconfig
+          make package/${{ inputs.package_name }}/compile V=s
+
+      - name: Collect package and checksums
+        run: |
+          mkdir -p artifacts
+          PACKAGE_PATH="$(find "${SDK_NAME}/bin/packages" \( -name "${PACKAGE_NAME}-*.${PACKAGE_EXT}" -o -name "${PACKAGE_NAME}_*.${PACKAGE_EXT}" \) -print -quit)"
+
+          if [ -z "$PACKAGE_PATH" ]; then
+            echo "No ${PACKAGE_NAME} .${PACKAGE_EXT} was built"
+            find "${SDK_NAME}/bin/packages" -maxdepth 5 -type f || true
+            exit 1
+          fi
+
+          cp "$PACKAGE_PATH" artifacts/
+          cd artifacts
+          sha256sum ./*.${PACKAGE_EXT} > SHA256SUMS
+        env:
+          SDK_NAME: ${{ env.SDK_NAME }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          PACKAGE_EXT: ${{ inputs.package_ext }}
+
+      - name: Upload package artifact
+        if: inputs.upload_artifact == true
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4.4.0
+        with:
+          name: ${{ inputs.package_name }}-${{ inputs.openwrt_version }}-${{ inputs.openwrt_arch }}${{ inputs.artifact_name_suffix }}
+          path: |
+            artifacts/*.apk
+            artifacts/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
