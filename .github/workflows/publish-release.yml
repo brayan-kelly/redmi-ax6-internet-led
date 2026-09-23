@@ -70,7 +70,17 @@ jobs:
         run: |
           PACKAGE_DIR="${SDK_NAME}/package/${PACKAGE_NAME}"
           mkdir -p "$PACKAGE_DIR"
-          rsync -a --exclude='.git' --exclude='.github' --exclude='*.apk' --exclude='*.ipk' ./ "$PACKAGE_DIR/"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.DS_Store' \
+            --exclude='*.tar.gz' \
+            --exclude='*.tar.zst' \
+            --exclude='*.apk' \
+            --exclude='*.ipk' \
+            --exclude="${SDK_NAME}" \
+            --exclude='package-artifacts' \
+            ./ "$PACKAGE_DIR/"
           sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${{ steps.release.outputs.version }}/" "$PACKAGE_DIR/Makefile"
           (cd "$SDK_NAME" && ./scripts/feeds update -a && ./scripts/feeds install luci-base jsonfilter)
           make -C "$SDK_NAME" defconfig
