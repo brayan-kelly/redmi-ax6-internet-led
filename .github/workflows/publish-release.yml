@@ -158,10 +158,11 @@ jobs:
           name: release-assets
           path: package-artifacts
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.build-feed.outputs.tag }}
           name: Release ${{ needs.build-feed.outputs.tag }}
+          generate_release_notes: true
           draft: false
           prerelease: ${{ needs.build-feed.outputs.prerelease }}
           make_latest: ${{ needs.build-feed.outputs.prerelease == 'false' }}
