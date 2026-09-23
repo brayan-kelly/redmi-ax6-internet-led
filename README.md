@@ -25,19 +25,13 @@ Tagged GitHub releases include an OpenWrt `.apk` package built with the OpenWrt 
 - `qualcommax/ipq807x`
 - `aarch64_cortex-a53`
 
-The repository feed is signed and hosted on GitHub Pages. Bootstrap the public key once, then add the feed and install without `--allow-untrusted`:
+The repository feed is signed and hosted on GitHub Pages. Run this as `root` on a supported OpenWrt router to verify the pinned feed key, configure the feed, and install the package without `--allow-untrusted`:
 
 ```sh
-FEED_BASE="https://brayan-kelly.github.io/redmi-ax6-internet-led/feed"
-wget "$FEED_BASE/internet-led.pub" -O /tmp/internet-led.pub
-echo 'e5f197a71d2255e5e06e4ad08ed522822cd32b52f012b7e33e9751735de495a5  /tmp/internet-led.pub' | sha256sum -c -
-install -m 0644 /tmp/internet-led.pub /etc/apk/keys/internet-led.pub
-echo "$FEED_BASE/aarch64_cortex-a53" >> /etc/apk/repositories.d/internet-led.list
-apk update
-apk add luci-app-internet-led
+wget -O /tmp/internet-led-install.sh https://raw.githubusercontent.com/brayan-kelly/redmi-ax6-internet-led/main/scripts/install.sh && sh /tmp/internet-led-install.sh
 ```
 
-The feed URL is enabled after the first signed release is deployed.
+The installer supports the `aarch64_cortex-a53` feed. After the first setup, update the package with `apk update` followed by `apk upgrade luci-app-internet-led`.
 
 ## Configuration
 
