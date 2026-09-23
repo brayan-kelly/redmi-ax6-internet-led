@@ -7,11 +7,9 @@
 				"internet-led-lists": [ "get_leds" ]
 			},
 			"uci": [
-				"internet-led"
-			],
-			"file": {
-				"/tmp/internet_led_state": [ "read" ]
-			}
+				"internet-led",
+				"network"
+			]
 		},
 		"write": {
 			"uci": [

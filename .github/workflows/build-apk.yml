@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  OPENWRT_VERSION: 25.12.3
+  OPENWRT_VERSION: 25.12.5
   OPENWRT_TARGET: qualcommax/ipq807x
   OPENWRT_ARCH: aarch64_cortex-a53
-  SDK_NAME: openwrt-sdk-25.12.3-qualcommax-ipq807x_gcc-14.3.0_musl.Linux-x86_64
+  SDK_NAME: openwrt-sdk-25.12.5-qualcommax-ipq807x_gcc-14.3.0_musl.Linux-x86_64
   PACKAGE_NAME: luci-app-internet-led
   PACKAGE_EXT: apk
 
@@ -65,7 +65,7 @@ jobs:
         working-directory: ${{ env.SDK_NAME }}
         run: |
           ./scripts/feeds update -a
-          ./scripts/feeds install luci-base
+          ./scripts/feeds install luci-base jsonfilter
           make defconfig
           make package/${PACKAGE_NAME}/compile V=s
 

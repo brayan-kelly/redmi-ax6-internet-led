@@ -4,11 +4,6 @@
 'require view';
 'require rpc';
 
-var networkDevices = rpc.declare({
-    object: 'luci-rpc',
-    method: 'getNetworkDevices'
-});
-
 var ledList = rpc.declare({
     object: 'internet-led-lists',
     method: 'get_leds'
@@ -19,14 +14,12 @@ return view.extend({
         var self = this;
         return Promise.all([
             uci.load('internet-led'),
-            networkDevices(),
+            uci.load('network'),
             ledList()
         ]).then(function(results) {
-            if (results[1] && results[1].devices) {
-                self.interfaces = results[1].devices;
-            } else {
-                self.interfaces = [];
-            }
+            self.interfaces = uci.sections('network', 'interface').map(function(section) {
+                return section['.name'];
+            });
             if (results[2] && results[2].leds) {
                 self.leds = results[2].leds;
             } else {
@@ -60,6 +53,9 @@ return view.extend({
         for (var i = 0; i < this.interfaces.length; i++) {
             o.value(this.interfaces[i], this.interfaces[i]);
         }
+        o.validate = function(section_id, value) {
+            return this.interfaces.indexOf(value) >= 0 || _('Select a configured logical network interface.');
+        }.bind(this);
         var currentWan = uci.get('internet-led', 'main', 'wan_if');
         if (currentWan && this.interfaces.indexOf(currentWan) === -1) {
             o.value(currentWan, currentWan + ' (custom)');
@@ -76,10 +72,10 @@ return view.extend({
         o.default = '3';
         o.description = _('Number of consecutive failures before declaring Internet DOWN.');
 
-        o = s.option(form.ListValue, 'blue_led', _('Blue LED'));
+        o = s.option(form.ListValue, 'blue_led', _('Online LED'));
         o.rmempty = false;
         o.default = 'blue:network';
-        o.description = _('LED name for online status (brightness 255).');
+        o.description = _('LED used for online status. If both LED choices match, it is on when online and off otherwise.');
         for (var j = 0; j < this.leds.length; j++) {
             o.value(this.leds[j], this.leds[j]);
         }
@@ -88,10 +84,10 @@ return view.extend({
             o.value(currentBlue, currentBlue + ' (custom)');
         }
 
-        o = s.option(form.ListValue, 'yellow_led', _('Yellow LED'));
+        o = s.option(form.ListValue, 'yellow_led', _('Offline LED'));
         o.rmempty = false;
         o.default = 'yellow:network';
-        o.description = _('LED name for offline status (brightness 255).');
+        o.description = _('LED used for offline status.');
         for (var k = 0; k < this.leds.length; k++) {
             o.value(this.leds[k], this.leds[k]);
         }

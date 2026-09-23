@@ -2,8 +2,6 @@
 
 load_config() {
     ENABLED=$(uci -q get internet-led.main.enabled || echo "1")
-    [ "$ENABLED" = "0" ] && return 1
-
     WAN_IF=$(uci -q get internet-led.main.wan_if || echo "wan")
     INTERVAL=$(uci -q get internet-led.main.interval || echo "5")
     FAIL_THRESHOLD=$(uci -q get internet-led.main.fail_threshold || echo "3")
@@ -26,31 +24,72 @@ log() {
     logger -t "$LOG_TAG" "$*"
 }
 
+validate_led_names() {
+    local led
+
+    for led in "$BLUE_LED" "$YELLOW_LED"; do
+        case "$led" in
+            ''|.|..|*/*|*[!A-Za-z0-9_.:-]*)
+                log "Ignoring invalid LED name"
+                if [ "$led" = "$BLUE_LED" ]; then
+                    BLUE_LED=""
+                fi
+                if [ "$led" = "$YELLOW_LED" ]; then
+                    YELLOW_LED=""
+                fi
+                ;;
+            *)
+                if [ ! -d "/sys/class/leds/$led" ] || [ ! -e "/sys/class/leds/$led/brightness" ]; then
+                    log "Ignoring unavailable LED: $led"
+                    [ "$led" = "$BLUE_LED" ] && BLUE_LED=""
+                    [ "$led" = "$YELLOW_LED" ] && YELLOW_LED=""
+                fi
+                ;;
+        esac
+    done
+}
+
 # ========= LED CONTROL =========
 set_leds() {
-    # $1 = blue brightness (0-255), $2 = yellow brightness
+    # $1 = online LED brightness (0-255), $2 = offline LED brightness
+    if [ "$BLUE_LED" = "$YELLOW_LED" ]; then
+        [ -e "/sys/class/leds/$BLUE_LED/brightness" ] && echo "$1" > "/sys/class/leds/$BLUE_LED/brightness"
+        return
+    fi
+
     [ -e "/sys/class/leds/$BLUE_LED/brightness" ] && echo "$1" > "/sys/class/leds/$BLUE_LED/brightness"
     [ -e "/sys/class/leds/$YELLOW_LED/brightness" ] && echo "$2" > "/sys/class/leds/$YELLOW_LED/brightness"
 }
 
 get_phy_dev() {
-    local iface="$1" dev
-    dev=$(uci -q get network."$iface".device 2>/dev/null)
-    [ -z "$dev" ] && dev=$(uci -q get network."$iface".ifname 2>/dev/null)
+    local iface="$1" status dev l3_dev
+
+    # netifd knows the active device behind logical interfaces such as WAN,
+    # bridges, VLANs, and PPP. Prefer its aggregate device so bridge carrier
+    # reflects the bridge rather than an arbitrary member port.
+    status=$(ubus call "network.interface.$iface" status 2>/dev/null)
+    dev=$(printf '%s' "$status" | jsonfilter -e '@.device' 2>/dev/null)
+    l3_dev=$(printf '%s' "$status" | jsonfilter -e '@.l3_device' 2>/dev/null)
+    [ -z "$dev" ] && dev="$l3_dev"
+
+    # Fall back for inactive interfaces without a netifd status device.
+    [ -z "$dev" ] && dev=$(uci -q get "network.$iface.device" 2>/dev/null)
+    [ -z "$dev" ] && dev=$(uci -q get "network.$iface.ifname" 2>/dev/null)
     [ -z "$dev" ] && dev="$iface"
+    echo "$dev"
+}
 
-    # For bridges, get first member
-    if [ -d "/sys/class/net/$dev/brif" ]; then
-        dev=$(ls /sys/class/net/"$dev"/brif 2>/dev/null | head -n1)
-    fi
+get_l3_dev() {
+    local iface="$1" status dev
 
-    # Strip VLAN tag (e.g., eth0.1 -> eth0). This gives the parent physical interface.
-    dev="${dev%%.*}"
+    status=$(ubus call "network.interface.$iface" status 2>/dev/null)
+    dev=$(printf '%s' "$status" | jsonfilter -e '@.l3_device' 2>/dev/null)
+    [ -z "$dev" ] && dev=$(printf '%s' "$status" | jsonfilter -e '@.device' 2>/dev/null)
     echo "$dev"
 }
 
 is_cable_plugged() {
-    local iface="$1" dev
+    local iface="$1" dev carrier state
 
     dev=$(get_phy_dev "$iface")
     if [ -z "$dev" ]; then
@@ -76,9 +115,29 @@ is_cable_plugged() {
     return 1
 }
 
+take_over_led_triggers() {
+    local led trigger_file
+    for led in "$BLUE_LED" "$YELLOW_LED"; do
+        [ -n "$led" ] || continue
+        trigger_file="/sys/class/leds/$led/trigger"
+        [ -w "$trigger_file" ] && echo none > "$trigger_file"
+    done
+}
+
+restore_led_triggers() {
+    # The stock OpenWrt LED init script reapplies the System -> LED UCI
+    # configuration, including its configured trigger and device settings.
+    [ -x /etc/init.d/led ] && /etc/init.d/led reload >/dev/null 2>&1
+}
+
 check_internet() {
+    local dev server
+
+    dev=$(get_l3_dev "$WAN_IF")
+    [ -n "$dev" ] || return 1
+
     for server in $TARGETS; do
-        ping -c 1 -W 2 "$server" >/dev/null 2>&1 && return 0
+        ping -I "$dev" -c 1 -W 2 "$server" >/dev/null 2>&1 && return 0
     done
     return 1
 }
@@ -90,11 +149,16 @@ consecutive_failures=0
 # If script is called with "stop", just turn off LEDs and exit
 if [ "$1" = "stop" ]; then
     load_config
+    validate_led_names
     set_leds 0 0
+    restore_led_triggers
     exit 0
 fi
 
-load_config || exit 0
+load_config
+[ "$ENABLED" = "0" ] && exit 0
+validate_led_names
+take_over_led_triggers
 
 while :; do
     if is_cable_plugged "$WAN_IF"; then

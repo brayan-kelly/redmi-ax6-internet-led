@@ -7,69 +7,51 @@ on:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  OPENWRT_VERSION: 25.12.5
+  OPENWRT_TARGET: qualcommax/ipq807x
+  OPENWRT_ARCH: aarch64_cortex-a53
+  SDK_NAME: openwrt-sdk-25.12.5-qualcommax-ipq807x_gcc-14.3.0_musl.Linux-x86_64
+  PACKAGE_NAME: luci-app-internet-led
 
 jobs:
-  create-release:
-    name: Create Release
+  build-feed:
+    name: Build package and signed feed
     runs-on: ubuntu-latest
+    environment: release
     permissions:
-      contents: write
-    
+      contents: read
+
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      
-      - name: Get tag name and version
-        id: get_tag
+
+      - name: Get release metadata
+        id: release
+        shell: bash
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
-          VERSION=${TAG_NAME#v}
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-      
-      - name: Check if pre-release
-        id: prerelease
-        run: |
-          if [[ "${{ steps.get_tag.outputs.TAG_NAME }}" == *"-beta"* || "${{ steps.get_tag.outputs.TAG_NAME }}" == *"-rc"* || "${{ steps.get_tag.outputs.TAG_NAME }}" == *"-alpha"* ]]; then
-            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
-            echo "This is a pre-release version"
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG_NAME" == *-beta* || "$TAG_NAME" == *-rc* || "$TAG_NAME" == *-alpha* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-            echo "This is a stable release"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
-      
-      - name: Set release title based on tag type
-        id: release_title
-        run: |
-          TAG="${{ steps.get_tag.outputs.TAG_NAME }}"
-          
-          if [[ "$TAG" == *"-beta"* ]]; then
-            echo "RELEASE_TITLE=Beta - $TAG" >> $GITHUB_OUTPUT
-          elif [[ "$TAG" == *"-rc"* ]]; then
-            echo "RELEASE_TITLE=Pre-release - $TAG" >> $GITHUB_OUTPUT
-          elif [[ "$TAG" == *"-alpha"* ]]; then
-            echo "RELEASE_TITLE=Alpha-release - $TAG" >> $GITHUB_OUTPUT
-          else
-            echo "RELEASE_TITLE=Release - $TAG" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Get tag message (strip PGP signature)
-        id: tag_message
-        run: |
-          # Get tag message and remove PGP signature block
-          TAG_MSG=$(git tag -l --format='%(contents)' "${{ steps.get_tag.outputs.TAG_NAME }}" | sed '/-----BEGIN PGP SIGNATURE-----/,/-----END PGP SIGNATURE-----/d')
-          
-          # Remove any trailing empty lines
-          TAG_MSG=$(echo "$TAG_MSG" | sed '/^$/N;/\n$/D')
-          
-          echo "TAG_MESSAGE<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAG_MSG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-      
-      - name: Install OpenWrt package build dependencies
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -77,84 +59,103 @@ jobs:
             libncurses-dev libssl-dev python3 python3-setuptools rsync \
             unzip zlib1g-dev file wget tar zstd
 
-      - name: Build OpenWrt package
-        env:
-          OPENWRT_VERSION: 25.12.3
-          OPENWRT_TARGET: qualcommax/ipq807x
-          SDK_NAME: openwrt-sdk-25.12.3-qualcommax-ipq807x_gcc-14.3.0_musl.Linux-x86_64
-          PACKAGE_NAME: luci-app-internet-led
-          PACKAGE_EXT: apk
+      - name: Download OpenWrt SDK
         run: |
           SDK_URL="https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${OPENWRT_TARGET}/${SDK_NAME}.tar.zst"
           wget "$SDK_URL"
           tar -xf "${SDK_NAME}.tar.zst"
 
-          mkdir -p "${SDK_NAME}/package/${PACKAGE_NAME}"
-          rsync -a \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='.DS_Store' \
-            --exclude='*.tar.gz' \
-            --exclude='*.tar.zst' \
-            --exclude='*.apk' \
-            --exclude='*.ipk' \
-            --exclude='*.sha256' \
-            --exclude='*.sha1' \
-            --exclude='*.md5' \
-            --exclude='*.checksums' \
-            --exclude='checksums.json' \
-            --exclude="${SDK_NAME}" \
-            --exclude='package-artifacts' \
-            ./ "${SDK_NAME}/package/${PACKAGE_NAME}/"
-
-          VERSION="${{ steps.get_tag.outputs.VERSION }}"
-          VERSION="${VERSION%%-*}"
-          sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${VERSION}/" "${SDK_NAME}/package/${PACKAGE_NAME}/Makefile"
-
-          pushd "${SDK_NAME}"
-          ./scripts/feeds update -a
-          ./scripts/feeds install luci-base
-          popd
-
-          make -C "${SDK_NAME}" defconfig
-          make -C "${SDK_NAME}" "package/${PACKAGE_NAME}/compile" V=s
-
-          mkdir -p package-artifacts
-          PACKAGE_PATH="$(find "${SDK_NAME}/bin/packages" \( -name "${PACKAGE_NAME}-*.${PACKAGE_EXT}" -o -name "${PACKAGE_NAME}_*.${PACKAGE_EXT}" \) -print -quit)"
-
-          if [ -z "$PACKAGE_PATH" ]; then
-            echo "No ${PACKAGE_NAME} .${PACKAGE_EXT} was built"
-            find "${SDK_NAME}/bin/packages" -maxdepth 5 -type f || true
-            exit 1
-          fi
-
+      - name: Build package
+        shell: bash
+        run: |
+          PACKAGE_DIR="${SDK_NAME}/package/${PACKAGE_NAME}"
+          mkdir -p "$PACKAGE_DIR"
+          rsync -a --exclude='.git' --exclude='.github' --exclude='*.apk' --exclude='*.ipk' ./ "$PACKAGE_DIR/"
+          sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=${{ steps.release.outputs.version }}/" "$PACKAGE_DIR/Makefile"
+          (cd "$SDK_NAME" && ./scripts/feeds update -a && ./scripts/feeds install luci-base jsonfilter)
+          make -C "$SDK_NAME" defconfig
+          make -C "$SDK_NAME" package/${PACKAGE_NAME}/compile V=s
+          mkdir -p package-artifacts site/feed/${OPENWRT_ARCH}
+          PACKAGE_PATH="$(find "${SDK_NAME}/bin/packages" -type f -name "${PACKAGE_NAME}-*.apk" -print -quit)"
+          test -n "$PACKAGE_PATH"
           cp "$PACKAGE_PATH" package-artifacts/
-          cd package-artifacts
-          sha256sum ./*.${PACKAGE_EXT} > SHA256SUMS
-          PACKAGE_FILE="$(basename "$PACKAGE_PATH")"
-          cat > checksums.json << EOF
-          {
-            "artifact": "$PACKAGE_FILE",
-            "release": "${{ steps.get_tag.outputs.TAG_NAME }}",
-            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-            "checksums": {
-              "sha256": "$(sha256sum "$PACKAGE_FILE" | awk '{print $1}')"
-            }
-          }
-          EOF
-      
-      - name: Create Release and Upload Assets
+          cp keys/internet-led.pub package-artifacts/
+          cp keys/internet-led.pub site/feed/internet-led.pub
+          (cd package-artifacts && sha256sum ./*.apk > SHA256SUMS)
+          cp package-artifacts/*.apk site/feed/${OPENWRT_ARCH}/
+
+      - name: Sign feed index
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        shell: bash
+        run: |
+          test -n "$APK_SIGNING_KEY" || { echo 'Missing APK_SIGNING_KEY Actions secret'; exit 1; }
+          KEY_FILE="$RUNNER_TEMP/internet-led-signing.key"
+          printf '%s\n' "$APK_SIGNING_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          mkdir -p "$RUNNER_TEMP/apk-root"
+          APK_TOOL="${SDK_NAME}/staging_dir/host/bin/apk"
+          test -x "$APK_TOOL"
+          cd "site/feed/${OPENWRT_ARCH}"
+          "$GITHUB_WORKSPACE/$APK_TOOL" mkndx \
+            --root "$RUNNER_TEMP/apk-root" \
+            --keys-dir "$GITHUB_WORKSPACE/keys" \
+            --allow-untrusted \
+            --sign "$KEY_FILE" \
+            --output packages.adb \
+            ./*.apk
+          rm -f "$KEY_FILE"
+
+      - name: Upload signed feed for Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: package-artifacts/
+          if-no-files-found: error
+
+  deploy-feed:
+    name: Deploy signed feed
+    needs: build-feed
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  create-release:
+    name: Publish GitHub release
+    needs: [build-feed, deploy-feed]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: package-artifacts
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
-          name: ${{ steps.release_title.outputs.RELEASE_TITLE }}
-          body: ${{ steps.tag_message.outputs.TAG_MESSAGE }}
+          tag_name: ${{ needs.build-feed.outputs.tag }}
+          name: Release ${{ needs.build-feed.outputs.tag }}
           draft: false
-          prerelease: ${{ steps.prerelease.outputs.IS_PRERELEASE == 'true' }}
-          make_latest: true
+          prerelease: ${{ needs.build-feed.outputs.prerelease }}
+          make_latest: ${{ needs.build-feed.outputs.prerelease == 'false' }}
           files: |
             package-artifacts/*.apk
             package-artifacts/SHA256SUMS
-            package-artifacts/checksums.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            package-artifacts/internet-led.pub

@@ -2,7 +2,8 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-internet-led
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
+PKGARCH:=all
 
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=Brayan Kelly
@@ -48,8 +49,7 @@ if ! uci -q get internet-led.main >/dev/null; then
 	uci commit internet-led
 fi
 
-/etc/init.d/rpcd restart >/dev/null 2>&1 || true
-/etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+[ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 /etc/init.d/internet-led enable >/dev/null 2>&1 || true
 /etc/init.d/internet-led start >/dev/null 2>&1 || true
 
@@ -70,8 +70,7 @@ define Package/luci-app-internet-led/postrm
 #!/bin/sh
 [ -n "$${IPKG_INSTROOT}" ] && exit 0
 
-/etc/init.d/rpcd restart >/dev/null 2>&1 || true
-/etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+[ -x /etc/init.d/rpcd ] && /etc/init.d/rpcd reload >/dev/null 2>&1 || true
 
 exit 0
 endef
